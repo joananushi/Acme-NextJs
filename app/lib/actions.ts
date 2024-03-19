@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
+import bcrypt from 'bcrypt';
+
  
 
 export async function authenticate(
@@ -26,6 +28,67 @@ export async function authenticate(
   }
 }
 
+const UserSchema = z.object({
+  id: z.string(),
+  name: z.string({
+    invalid_type_error: 'Please select a customer.',
+  }),
+  email: z.string({
+    invalid_type_error: 'Please select a customer.',
+  }),
+  password: z.string({
+    invalid_type_error: 'Please select a customer.',
+  }),
+  
+});
+
+export type UserState = {
+  errors?: {
+    name?: string[];
+    email?: string[];
+    password?: string[];
+  };
+  message?: string | null;
+};
+
+
+const CreateUser = UserSchema.omit({ id: true, date: true });
+export async function createUser(prevState: UserState, formData: FormData) {
+  // Validate form using Zod
+  const validatedFields = CreateUser.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    password: formData.get('password'),
+  });
+ 
+  // If form validation fails, return errors early. Otherwise, continue.
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Create Invoice.',
+    };
+  }
+ 
+  // Prepare data for insertion into the database
+  const { name, email, password } = validatedFields.data;
+  const hashedPassword = await bcrypt.hash(password, 10); 
+  // Insert data into the database
+  try {
+    await sql`
+      INSERT INTO users (name, email, password)
+      VALUES (${name}, ${email}, ${hashedPassword})
+    `;
+  } catch (error) {
+
+    return {
+      message: 'Database Error: Failed to Create Invoice.',
+    };
+  }
+ 
+  // Revalidate the cache for the invoices page and redirect the user.
+  revalidatePath('/dashboard');
+  redirect('/dashboard');
+}
 
 
 
